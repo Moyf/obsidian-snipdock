@@ -40,6 +40,10 @@ interface MenuState {
 	snippetRows: Map<string, HTMLElement>;
 	searchInputEl: HTMLInputElement | null;
 	searchQuery: string;
+	// True while an active search temporarily bypasses the visibility filter
+	// (results come from all snippets) and the user hasn't clicked the filter
+	// button to re-apply it. Reset when the query is cleared.
+	searchOverridesFilter: boolean;
 	visibilityFilter: SnippetVisibilityFilter;
 	visibilityFilterButton: ButtonComponent | null;
 	isSyncing: boolean;
@@ -83,6 +87,7 @@ export function openSnippetMenu(
 		snippetRows: new Map(),
 		searchInputEl: null,
 		searchQuery: "",
+		searchOverridesFilter: false,
 		visibilityFilter: plugin.settings.snippetVisibilityFilter,
 		visibilityFilterButton: null,
 		isSyncing: false,
@@ -163,7 +168,19 @@ function addSearchRow(menu: Menu, state: MenuState): void {
 		state.searchInputEl = input;
 
 		input.addEventListener("input", () => {
+			const wasSearching = state.searchQuery.trim() !== "";
 			state.searchQuery = input.value;
+			const isSearching = state.searchQuery.trim() !== "";
+			if (!isSearching) {
+				// Search ended: drop the override so the chosen filter applies
+				// again (it was never changed, so this restores the prior mode).
+				state.searchOverridesFilter = false;
+			} else if (!wasSearching) {
+				// Fresh search: bypass the visibility filter until the user
+				// clicks the filter button or clears the query.
+				state.searchOverridesFilter = true;
+			}
+			updateVisibilityFilterButton(state);
 			filterSnippets(state);
 		});
 		// Keep menu keyboard nav and item-selection from hijacking the field.
@@ -183,10 +200,14 @@ function addSearchRow(menu: Menu, state: MenuState): void {
 function filterSnippets(state: MenuState): void {
 	const q = state.searchQuery.trim().toLowerCase();
 	const enabledSnippets = state.plugin.app.customCss.enabledSnippets;
+	// While a fresh search is active, results come from all snippets; the
+	// chosen filter re-applies once the user clicks the button or clears it.
+	const bypassVisibility = state.searchOverridesFilter;
 	for (const [name, row] of state.snippetRows) {
 		const matchesSearch = q === "" || name.toLowerCase().includes(q);
 		const isEnabled = enabledSnippets.has(name);
 		const matchesVisibility =
+			bypassVisibility ||
 			state.visibilityFilter === "all" ||
 			(state.visibilityFilter === "enabled" && isEnabled) ||
 			(state.visibilityFilter === "disabled" && !isEnabled);
@@ -517,6 +538,15 @@ function addActionRow(menu: Menu, state: MenuState): void {
 			.setClass("snipdock-action-btn-filter")
 			.onClick((evt) => {
 				evt.stopPropagation();
+				// First click during a fresh search just leaves search mode
+				// and re-applies the previously chosen filter; further clicks
+				// cycle filters as usual while the search stays active.
+				if (state.searchOverridesFilter) {
+					state.searchOverridesFilter = false;
+					updateVisibilityFilterButton(state);
+					filterSnippets(state);
+					return;
+				}
 				const currentIndex = SNIPPET_VISIBILITY_FILTERS.findIndex(
 					(filter) => filter.value === state.visibilityFilter
 				);
@@ -549,10 +579,22 @@ function addActionRow(menu: Menu, state: MenuState): void {
 
 function updateVisibilityFilterButton(state: MenuState): void {
 	const button = state.visibilityFilterButton;
+	if (!button) return;
+	if (state.searchOverridesFilter) {
+		// Fresh search: the filter is bypassed, so surface a search icon
+		// instead of whichever filter is parked underneath.
+		button
+			.setIcon("search")
+			.setTooltip(
+				"Searching all snippets. Click to re-apply the visibility filter."
+			);
+		button.buttonEl.setAttr("data-snipdock-filter", "search");
+		return;
+	}
 	const filter = SNIPPET_VISIBILITY_FILTERS.find(
 		(option) => option.value === state.visibilityFilter
 	);
-	if (!button || !filter) return;
+	if (!filter) return;
 	button.setIcon(filter.icon).setTooltip(filter.tooltip);
 	button.buttonEl.setAttr("data-snipdock-filter", filter.value);
 }
