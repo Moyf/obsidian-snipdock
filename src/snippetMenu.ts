@@ -471,7 +471,6 @@ function addSnippetRows(menu: Menu, state: MenuState): void {
 					if (isControlClick(evt.target)) return;
 					evt.preventDefault();
 					evt.stopPropagation();
-					toggle.setValue(!toggle.getValue());
 				},
 				true
 			);

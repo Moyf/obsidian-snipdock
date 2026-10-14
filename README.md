@@ -62,7 +62,7 @@ The menu has three sections. The top and bottom rows stay pinned; the middle lis
 
 One row per `.css` file in your snippets folder.
 
-- Toggle (or click anywhere on the row) to enable/disable.
+- Toggle to enable/disable. Clicking elsewhere on the row does nothing.
 - Pencil icon: rename the file. If the snippet was enabled, it gets re-enabled under the new name.
 - `</>` icon: open the file in your OS default app for CSS.
 
